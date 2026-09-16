@@ -175,6 +175,19 @@ typedef struct {
 	bool is_datum_job;
 	unsigned char datum_job_idx;
 	unsigned char datum_coinbaser_id;
+
+	// BIP-110 BLAKE2b Sia-style work data (set when the template is_blake2b).
+	// coinb1 length varies with chain state (coinbase size depends on the
+	// current headline text, which changes per RC) - store the actual
+	// received length rather than a hardcoded 39, which silently truncated
+	// real coinbase data once the headline text grew, corrupting the root
+	// hash used for share verification and causing every honest share to
+	// be rejected (client and server must agree on the exact bytes hashed).
+	bool is_blake2b;
+	unsigned char blake2b_prevblock_hidden[32];
+	unsigned char blake2b_coinb1_bin[STRATUM_COINBASE1_MAX_LEN>>1];
+	int blake2b_coinb1_len;
+	unsigned char blake2b_ntime_bin[8];
 } T_DATUM_STRATUM_JOB;
 
 typedef struct T_DATUM_STRATUM_THREADPOOL_DATA {

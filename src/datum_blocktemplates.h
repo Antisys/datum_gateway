@@ -160,6 +160,7 @@ typedef struct {
 	uint32_t	height; //
 	uint32_t	version; //
 	uint32_t	sigoplimit; //
+	bool		is_blake2b; // BIP-110 BLAKE2b PoW fork (detected via GBT "rules" array)
 	
 	char		bits[9]; //
 	char		dummy[7]; // unused, possibly for alignment

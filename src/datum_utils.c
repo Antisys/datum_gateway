@@ -206,6 +206,30 @@ bool double_sha256(void *out, const void *in, size_t length) {
 	return 1;
 }
 
+// BIP-110 BLAKE2b: prevblock_hidden = TaggedHash("Bitcoin prevblock header, hashed", reverse(prevblock), 32),
+// with the first 6 bytes zeroed. Mirrors cpuminer's bip110_compute_prevblock_hidden().
+void datum_blake2b_compute_prevblock_hidden(const uint8_t *prevblock_wire, uint8_t *hidden) {
+	static const char * const tag = "Bitcoin prevblock header, hashed";
+	uint8_t reversed[32];
+	uint8_t tag_hash[32];
+	uint8_t buf[96];
+	int i;
+
+	// struct stores the prev hash in wire order; TaggedHash needs display order
+	for (i = 0; i < 32; i++) {
+		reversed[i] = prevblock_wire[31 - i];
+	}
+
+	// TaggedHash (BIP-340 style): SHA256(SHA256(tag) || SHA256(tag) || data)
+	my_sha256(tag_hash, tag, strlen(tag));
+	memcpy(buf, tag_hash, 32);
+	memcpy(buf + 32, tag_hash, 32);
+	memcpy(buf + 64, reversed, 32);
+	my_sha256(hidden, buf, 96);
+
+	memset(hidden, 0, 6);
+}
+
 long double get_approx_achieved_diff(const unsigned char *bytes) {
 	if (bytes == NULL) {
 		// Handle null pointer

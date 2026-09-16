@@ -18,6 +18,7 @@ option(ENABLE_API "Build API support." ON)
 include(GNUInstallDirs)
 
 add_executable(datum_gateway
+	src/blake2b.c
 	src/datum_blocktemplates.c
 	src/datum_coinbaser.c
 	src/datum_conf.c

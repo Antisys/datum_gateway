@@ -346,6 +346,23 @@ T_DATUM_TEMPLATE_DATA *datum_gbt_parser(json_t *gbt) {
 		}
 	}
 	
+	// Detect a BIP-110 BLAKE2b PoW fork from the GBT "rules" array.
+	// A "!blake2b" rule means BLAKE2b is an active, mandatory consensus rule.
+	tdata->is_blake2b = false;
+	{
+		json_t *rules = json_object_get(gbt, "rules");
+		if (json_is_array(rules)) {
+			size_t ridx;
+			json_t *rule;
+			json_array_foreach(rules, ridx, rule) {
+				if (json_is_string(rule) && !strcmp(json_string_value(rule), "!blake2b")) {
+					tdata->is_blake2b = true;
+					break;
+				}
+			}
+		}
+	}
+	
 	return tdata;
 }
 
@@ -446,7 +463,7 @@ void *datum_gateway_template_thread(void *args) {
 		i++;
 		
 		// fetch latest template
-		snprintf(gbt_req, sizeof(gbt_req), "{\"method\":\"getblocktemplate\",\"params\":[{\"rules\":[\"segwit\"]}],\"id\":%"PRIu64"}",(uint64_t)((uint64_t)time(NULL)<<(uint64_t)8)|(uint64_t)(i&255));
+		snprintf(gbt_req, sizeof(gbt_req), "{\"method\":\"getblocktemplate\",\"params\":[{\"rules\":[\"segwit\",\"blake2b\"]}],\"id\":%"PRIu64"}",(uint64_t)((uint64_t)time(NULL)<<(uint64_t)8)|(uint64_t)(i&255));
 		gbt = bitcoind_json_rpc_call(tcurl, &datum_config, gbt_req);
 		
 		if (!gbt) {
