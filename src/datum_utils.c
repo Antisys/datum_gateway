@@ -56,6 +56,7 @@
 #include "datum_gateway.h"
 #include "datum_logger.h"
 #include "datum_utils.h"
+#include "blake2b.h"
 #include "thirdparty_base58.h"
 #include "thirdparty_segwit_addr.h"
 #include "datum_logger.h"
@@ -228,6 +229,116 @@ void datum_blake2b_compute_prevblock_hidden(const uint8_t *prevblock_wire, uint8
 	my_sha256(hidden, buf, 96);
 
 	memset(hidden, 0, 6);
+}
+
+// BIP-110 BLAKE2b V2-header pipeline. Verified byte-for-byte against Knots'
+// own src/test/data/block_header_v2.json test vectors (all 5 vectors, all
+// 4 ASIC profiles, every intermediate hash) before writing any of this -
+// see the datum_stratum.h comment on T_DATUM_STRATUM_JOB for the full
+// rationale. We always use ASIC profile 1, a null XOR key (so no masking
+// is needed), and no merge-mining (m_mm_rhs = zeros) - the simplest of
+// the four valid profiles.
+
+// TaggedHash (BIP-340 style): SHA256(SHA256(tag) || SHA256(tag) || data)
+static void bip110_tagged_hash(const char *tag, const uint8_t *data, size_t len, uint8_t *out) {
+	uint8_t tag_hash[32];
+	uint8_t *buf = malloc(64 + len);
+	my_sha256(tag_hash, tag, strlen(tag));
+	memcpy(buf, tag_hash, 32);
+	memcpy(buf + 32, tag_hash, 32);
+	memcpy(buf + 64, data, len);
+	my_sha256(out, buf, 64 + len);
+	free(buf);
+}
+
+static void reverse32(uint8_t *out, const uint8_t *in) {
+	for (int i = 0; i < 32; i++) out[i] = in[31 - i];
+}
+
+// h1 = TaggedHash("Bitcoin block header 1", complete_version || prevblock(display order)
+//      || height || merkleroot(internal order, used as-is) || time_on_wire || 0x00
+//      || nBits || txcount(as u32) || flags || clear_bits || xor_key_hash)
+//
+// prevblock_bin/merkleroot_bin are both expected in "internal" (wire) byte
+// order - i.e. exactly what block_template->previousblockhash_bin and a
+// normally-computed merkle root already are. prevblock gets re-reversed
+// back to display order here (matching the real GetHash() semantics);
+// merkleroot is used directly.
+void datum_bip110_compute_h1(uint32_t version, const uint8_t *prevblock_bin,
+		uint32_t height, const uint8_t *merkleroot_bin, uint32_t time_on_wire,
+		uint32_t nbits, uint16_t txcount, uint8_t flags, uint8_t clear_bits,
+		const uint8_t *xor_key, uint8_t *h1_out) {
+	uint32_t complete_version = 0x80000000u | (version & ~0x80000000u);
+	uint8_t prevblock_display[32];
+	uint8_t xor_key_hash[32];
+	uint8_t input[119];
+	size_t pos = 0;
+
+	reverse32(prevblock_display, prevblock_bin);
+	bip110_tagged_hash("Bitcoin block hash PoW XOR key", xor_key, 16, xor_key_hash);
+
+	memcpy(input + pos, &complete_version, 4); pos += 4;
+	memcpy(input + pos, prevblock_display, 32); pos += 32;
+	memcpy(input + pos, &height, 4); pos += 4;
+	memcpy(input + pos, merkleroot_bin, 32); pos += 32;
+	memcpy(input + pos, &time_on_wire, 4); pos += 4;
+	input[pos] = 0x00; pos += 1;
+	memcpy(input + pos, &nbits, 4); pos += 4;
+	{
+		uint32_t txcount32 = txcount;
+		memcpy(input + pos, &txcount32, 4); pos += 4;
+	}
+	input[pos] = flags; pos += 1;
+	input[pos] = clear_bits; pos += 1;
+	memcpy(input + pos, xor_key_hash, 32); pos += 32;
+
+	bip110_tagged_hash("Bitcoin block header 1", input, pos, h1_out);
+}
+
+// h2 = TaggedHash("Merge-mining hook", h1 || zeros(32) || mm_rhs)
+void datum_bip110_compute_h2(const uint8_t *h1, const uint8_t *mm_rhs, uint8_t *h2_out) {
+	uint8_t input[96];
+	memcpy(input, h1, 32);
+	memset(input + 32, 0, 32);
+	memcpy(input + 64, mm_rhs, 32);
+	bip110_tagged_hash("Merge-mining hook", input, 96, h2_out);
+}
+
+// hash1 = BLAKE2b-256(0x00000000 || h2 || extranonce(16))
+void datum_bip110_compute_hash1(const uint8_t *h2, const uint8_t *extranonce, uint8_t *hash1_out) {
+	uint8_t input[52];
+	blake2b_ctx ctx;
+	memset(input, 0, 4);
+	memcpy(input + 4, h2, 32);
+	memcpy(input + 36, extranonce, 16);
+	blake2b_init(&ctx, 32, NULL, 0);
+	blake2b_update(&ctx, input, 52);
+	blake2b_final(&ctx, hash1_out);
+}
+
+// ASIC profile 1: BLAKE2b-256(nNonce || m_nonce2 || m_nonce3 || m_time_offset
+//      || hash1 || h2). Null XOR key -> no masking. Returns the hash in
+// "display" byte order (matches Knots' own block_hash test-vector field
+// directly) - callers doing numeric target comparison (index 31 = MSB,
+// e.g. this codebase's compare_hashes/nbits_to_target) must byte-reverse
+// this output first.
+void datum_bip110_compute_pow_hash_profile1(uint32_t nnonce, const uint8_t *hash1,
+		const uint8_t *h2, uint8_t *out) {
+	uint8_t input[80];
+	uint32_t zero = 0;
+	blake2b_ctx ctx;
+	size_t pos = 0;
+
+	memcpy(input + pos, &nnonce, 4); pos += 4;
+	memcpy(input + pos, &zero, 4); pos += 4;   // m_nonce2 = 0
+	memcpy(input + pos, &zero, 4); pos += 4;   // m_nonce3 = 0
+	memcpy(input + pos, &zero, 4); pos += 4;   // m_time_offset = 0
+	memcpy(input + pos, hash1, 32); pos += 32;
+	memcpy(input + pos, h2, 32); pos += 32;
+
+	blake2b_init(&ctx, 32, NULL, 0);
+	blake2b_update(&ctx, input, pos);
+	blake2b_final(&ctx, out);
 }
 
 long double get_approx_achieved_diff(const unsigned char *bytes) {

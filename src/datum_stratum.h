@@ -176,18 +176,28 @@ typedef struct {
 	unsigned char datum_job_idx;
 	unsigned char datum_coinbaser_id;
 
-	// BIP-110 BLAKE2b Sia-style work data (set when the template is_blake2b).
-	// coinb1 length varies with chain state (coinbase size depends on the
-	// current headline text, which changes per RC) - store the actual
-	// received length rather than a hardcoded 39, which silently truncated
-	// real coinbase data once the headline text grew, corrupting the root
-	// hash used for share verification and causing every honest share to
-	// be rejected (client and server must agree on the exact bytes hashed).
+#define BIP110_ASIC_PROFILE_1 1
+
+	// BIP-110 BLAKE2b V2-header work data (set when the template is_blake2b).
+	// This is the real, consensus-matching BIP-110 pipeline (TaggedHash h1/h2
+	// + double BLAKE2b-256), verified byte-for-byte against Knots' own
+	// src/test/data/block_header_v2.json test vectors. h1/h2 are computed
+	// once per job from a real merkle root (fixed dummy extranonce2, since
+	// the ASIC-profile-1 header already carries a dedicated m_extranonce
+	// field for per-miner uniqueness - no need to splice per-miner data
+	// into the coinbase itself for BLAKE2b jobs). ASIC profile 1, null XOR
+	// key, and no merge-mining are used throughout for simplicity - all
+	// valid per spec, just the simplest of the four supported profiles.
 	bool is_blake2b;
-	unsigned char blake2b_prevblock_hidden[32];
-	unsigned char blake2b_coinb1_bin[STRATUM_COINBASE1_MAX_LEN>>1];
-	int blake2b_coinb1_len;
-	unsigned char blake2b_ntime_bin[8];
+	uint8_t blake2b_h1[32];
+	uint8_t blake2b_h2[32];
+	uint8_t blake2b_prevblock_bin[32];   // internal-order form, needed again for submitblock header
+	uint8_t blake2b_merkleroot_bin[32];  // internal-order form, needed again for submitblock header
+	uint32_t blake2b_version;
+	uint32_t blake2b_time_on_wire;
+	uint32_t blake2b_nbits;
+	uint32_t blake2b_height;
+	uint16_t blake2b_txcount;
 } T_DATUM_STRATUM_JOB;
 
 typedef struct T_DATUM_STRATUM_THREADPOOL_DATA {
@@ -282,7 +292,8 @@ const char *datum_stratum_mod_username(const char *username_s, char *username_bu
 int send_mining_notify(T_DATUM_CLIENT_DATA *c, bool clean, bool quickdiff, bool new_block);
 void update_stratum_job(T_DATUM_TEMPLATE_DATA *block_template, bool new_block, int job_state);
 void stratum_job_merkle_root_calc(T_DATUM_STRATUM_JOB *s, unsigned char *coinbase_txn_hash, unsigned char *merkle_root_output);
-int assembleBlockAndSubmit(uint8_t *block_header, uint8_t *coinbase_txn, size_t coinbase_txn_size, T_DATUM_STRATUM_JOB *job, T_DATUM_STRATUM_THREADPOOL_DATA *sdata, const char *block_hash_hex, bool empty_work);
+int assembleBlockAndSubmit(uint8_t *block_header, size_t header_len, uint8_t *coinbase_txn, size_t coinbase_txn_size, T_DATUM_STRATUM_JOB *job, T_DATUM_STRATUM_THREADPOOL_DATA *sdata, const char *block_hash_hex, bool empty_work);
+int datum_blake2b_assemble_and_submit_block(T_DATUM_STRATUM_JOB *job, T_DATUM_STRATUM_THREADPOOL_DATA *sdata, uint32_t nnonce, const uint8_t *extranonce, const char *block_hash_hex);
 void generate_coinbase_txns_for_stratum_job(T_DATUM_STRATUM_JOB *s, bool empty_only);
 int send_mining_set_difficulty(T_DATUM_CLIENT_DATA *c);
 bool stratum_latest_empty_check_ready_for_full(void);

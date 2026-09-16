@@ -58,6 +58,14 @@ unsigned char hex2bin_uchar(const char *in);
 void build_hex_lookup(void);
 bool my_sha256(void *digest, const void *buffer, size_t length);
 void datum_blake2b_compute_prevblock_hidden(const uint8_t *prevblock_wire, uint8_t *hidden);
+void datum_bip110_compute_h1(uint32_t version, const uint8_t *prevblock_bin,
+		uint32_t height, const uint8_t *merkleroot_bin, uint32_t time_on_wire,
+		uint32_t nbits, uint16_t txcount, uint8_t flags, uint8_t clear_bits,
+		const uint8_t *xor_key, uint8_t *h1_out);
+void datum_bip110_compute_h2(const uint8_t *h1, const uint8_t *mm_rhs, uint8_t *h2_out);
+void datum_bip110_compute_hash1(const uint8_t *h2, const uint8_t *extranonce, uint8_t *hash1_out);
+void datum_bip110_compute_pow_hash_profile1(uint32_t nnonce, const uint8_t *hash1,
+		const uint8_t *h2, uint8_t *out);
 void nbits_to_target(uint32_t nbits, uint8_t *target);
 int compare_hashes(const uint8_t *hash1, const uint8_t *hash2);
 unsigned long long block_reward(unsigned int block_height);
