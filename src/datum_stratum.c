@@ -1060,6 +1060,9 @@ int client_mining_submit_blake2b(T_DATUM_CLIENT_DATA *c, uint64_t id, json_t *pa
 		DLOG_WARN("************************************************************************************************");
 		DLOG_WARN("******** BLOCK FOUND - %s ********", new_notify_blockhash);
 		DLOG_WARN("************************************************************************************************");
+		datum_blocks_found_count++;
+		strncpy(datum_blocks_found_last_hash, new_notify_blockhash, sizeof(datum_blocks_found_last_hash) - 1);
+		datum_blocks_found_last_time = (uint64_t)time(NULL);
 		datum_blake2b_assemble_and_submit_block(job, m->sdata, nnonce, extranonce_bin, new_notify_blockhash);
 	}
 
@@ -1449,7 +1452,10 @@ int client_mining_submit(T_DATUM_CLIENT_DATA *c, uint64_t id, json_t *params_obj
 		DLOG_WARN("************************************************************************************************");
 		DLOG_WARN("******** BLOCK FOUND - %s ********",new_notify_blockhash);
 		DLOG_WARN("************************************************************************************************");
-		
+		datum_blocks_found_count++;
+		strncpy(datum_blocks_found_last_hash, new_notify_blockhash, sizeof(datum_blocks_found_last_hash) - 1);
+		datum_blocks_found_last_time = (uint64_t)time(NULL);
+
 		i = assembleBlockAndSubmit(block_header, 80, full_cb_txn, cb->coinb1_len+12+cb->coinb2_len, job, m->sdata, new_notify_blockhash, empty_work);
 		if (i) {
 			// successfully submitted

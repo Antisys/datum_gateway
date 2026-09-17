@@ -41,6 +41,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <microhttpd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -94,6 +95,27 @@ void datum_api_var_DATUM_SHARES_ACCEPTED(char *buffer, size_t buffer_size, const
 }
 void datum_api_var_DATUM_SHARES_REJECTED(char *buffer, size_t buffer_size, const T_DATUM_API_DASH_VARS *vardata) {
 	snprintf(buffer, buffer_size, "%llu  (%llu diff)", (unsigned long long)datum_rejected_share_count, (unsigned long long)datum_rejected_share_diff);
+}
+void datum_api_var_DATUM_BLOCK_FOUND_BANNER(char *buffer, size_t buffer_size, const T_DATUM_API_DASH_VARS *vardata) {
+	if (datum_blocks_found_count == 0) {
+		snprintf(buffer, buffer_size,
+			"<div style='padding:10px;text-align:center;color:gray;'>No blocks found yet.</div>");
+		return;
+	}
+
+	time_t last_time = (time_t)datum_blocks_found_last_time;
+	struct tm tm_buf;
+	char timestr[32];
+	gmtime_r(&last_time, &tm_buf);
+	strftime(timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S UTC", &tm_buf);
+
+	snprintf(buffer, buffer_size,
+		"<div style='padding:14px;text-align:center;background:#1a7a1a;color:white;font-size:1.3em;font-weight:bold;border-radius:6px;margin-bottom:10px;'>"
+		"&#127881; BLOCK FOUND! &#127881;<br>"
+		"<span style='font-size:0.7em;font-weight:normal;word-break:break-all;'>%s</span><br>"
+		"<span style='font-size:0.6em;font-weight:normal;'>%s &mdash; total found: %llu</span>"
+		"</div>",
+		datum_blocks_found_last_hash, timestr, (unsigned long long)datum_blocks_found_count);
 }
 void datum_api_var_DATUM_CONNECTION_STATUS(char *buffer, size_t buffer_size, const T_DATUM_API_DASH_VARS *vardata) {
 	const char *colour = "lime";
@@ -229,6 +251,7 @@ void datum_api_var_STRATUM_JOB_TXNCOUNT(char *buffer, size_t buffer_size, const 
 DATUM_API_VarEntry var_entries[] = {
 	{"DATUM_SHARES_ACCEPTED", datum_api_var_DATUM_SHARES_ACCEPTED},
 	{"DATUM_SHARES_REJECTED", datum_api_var_DATUM_SHARES_REJECTED},
+	{"DATUM_BLOCK_FOUND_BANNER", datum_api_var_DATUM_BLOCK_FOUND_BANNER},
 	{"DATUM_CONNECTION_STATUS", datum_api_var_DATUM_CONNECTION_STATUS},
 	{"DATUM_POOL_HOST", datum_api_var_DATUM_POOL_HOST},
 	{"DATUM_POOL_TAG", datum_api_var_DATUM_POOL_TAG},

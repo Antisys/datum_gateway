@@ -145,6 +145,10 @@ extern uint64_t datum_accepted_share_diff;
 extern uint64_t datum_rejected_share_count;
 extern uint64_t datum_rejected_share_diff;
 
+extern uint64_t datum_blocks_found_count;
+extern char datum_blocks_found_last_hash[65];
+extern uint64_t datum_blocks_found_last_time;
+
 #define DATUM_REJECT_BAD_JOB_ID 10
 #define DATUM_REJECT_BAD_COINBASE_ID 11
 #define DATUM_REJECT_BAD_EXTRANONCE_SIZE 12

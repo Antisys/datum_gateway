@@ -115,6 +115,11 @@ uint64_t datum_accepted_share_diff = 0;
 uint64_t datum_rejected_share_count = 0;
 uint64_t datum_rejected_share_diff = 0;
 
+// Blocks found by this gateway (any client), for the dashboard banner.
+uint64_t datum_blocks_found_count = 0;
+char datum_blocks_found_last_hash[65] = {0};
+uint64_t datum_blocks_found_last_time = 0;
+
 uint64_t datum_last_accepted_share_tsms = 0;
 uint64_t datum_last_accepted_share_local_tsms = 0;
 
