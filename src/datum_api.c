@@ -1621,6 +1621,25 @@ int datum_api_OK(struct MHD_Connection *connection) {
 	return datum_api_submit_uncached_response(connection, MHD_HTTP_OK, response);
 }
 
+int datum_api_blocks_found_json(struct MHD_Connection * const connection) {
+	char json_response[256];
+	int json_response_len;
+
+	json_response_len = snprintf(json_response, sizeof(json_response), "{"
+		"\"count\": %llu,"
+		"\"last_hash\": \"%s\","
+		"\"last_time\": %llu"
+	"}",
+		(unsigned long long)datum_blocks_found_count,
+		datum_blocks_found_last_hash,
+		(unsigned long long)datum_blocks_found_last_time);
+
+	if (json_response_len >= (int)sizeof(json_response)) json_response_len = sizeof(json_response) - 1;
+	struct MHD_Response *response = MHD_create_response_from_buffer(json_response_len, (void *)json_response, MHD_RESPMEM_MUST_COPY);
+	MHD_add_response_header(response, "Content-Type", "application/json");
+	return datum_api_submit_uncached_response(connection, MHD_HTTP_OK, response);
+}
+
 #ifdef DATUM_API_FOR_UMBREL
 int datum_api_umbrel_widget(struct MHD_Connection * const connection) {
 	char json_response[512];
@@ -1800,6 +1819,13 @@ enum MHD_Result datum_api_answer(void *cls, struct MHD_Connection *connection, c
 			break;
 		}
 		
+		case 'b': {
+			if (!strcmp(url, "/blocks_found")) {
+				return datum_api_blocks_found_json(connection);
+			}
+			break;
+		}
+
 		case 'c': {
 			if (!strcmp(url, "/clients")) {
 				return datum_api_client_dashboard(connection);
